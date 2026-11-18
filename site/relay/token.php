@@ -7,7 +7,7 @@ header('X-Content-Type-Options: nosniff');
 
 function out($code, $arr) { http_response_code($code); echo json_encode($arr); exit; }
 
-$cfg = @include __DIR__ . '/../../shortpost-relay-private/config.php';
+$cfg = @include __DIR__ . '/../relay-private/config.php';
 if (!is_array($cfg) || empty($cfg['client_key']) || empty($cfg['client_secret'])) {
     out(500, ['error' => 'relay_not_configured']);
 }
