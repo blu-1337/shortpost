@@ -1,0 +1,16 @@
+.venv/
+.python/
+data/
+logs/
+library/
+sample-video/
+inbox/*
+!inbox/.gitkeep
+*.sqlite3
+secrets*.toml
+client_secret*.json
+token*.json
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.claude/

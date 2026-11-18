@@ -1,0 +1,11 @@
+{hook}
+
+{summary}
+
+{affiliate_block}
+🔗 Free workbook, beats & plugin deals: {hub_text}
+🎬 More plugin reviews: {channel}
+
+{disclosure}
+
+{hashtags}

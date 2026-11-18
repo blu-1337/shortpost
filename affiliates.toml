@@ -1,0 +1,93 @@
+# URLs copied exactly from https://links.medianopol.com/ (2026-11-03). Never strip #fragments or ?ref= params.
+# [[link]]  = affiliate/partner deal (always carries a disclosure)
+# [[promo]] = Samastano's own product (no disclosure)
+
+[[link]]
+id = "dogma"
+label = "DOGMA by AP Mastering"
+keywords = ["dogma", "ap mastering", "apmastering"]
+url = "https://ip.apmastering.com/plugins/dogma"
+code = "samastano"
+discount = "10% off"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest", "instagram", "tiktok"]
+priority = 30
+
+[[link]]
+id = "stranis"
+label = "STRANIS Plugins"
+keywords = ["stranis"]
+url = "https://www.stranis.com/products?ref=SAMASTANO"
+code = ""
+discount = "15% off through this link"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest", "instagram", "tiktok"]
+priority = 30
+
+[[link]]
+id = "wa-production"
+label = "WA Production plugins"
+keywords = ["wa production", "waproduction"]
+url = "https://www.waproduction.com/#znprv2qadovvj"
+code = ""
+discount = ""
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+priority = 20
+
+[[link]]
+id = "fl-studio"
+label = "FL Studio"
+keywords = ["fl studio", "flstudio", "image-line", "image line"]
+url = "https://go.image-line.com/QY3Xe6"
+code = ""
+discount = ""
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+priority = 5
+
+[[promo]]
+id = "workbook-free"
+label = "FREE Finish More Beats workbook"
+url = "https://samastano.medianopol.com/free-stages-workbook-signup/"
+use = "fallback"
+platforms = ["facebook", "threads", "bluesky"]
+
+[[promo]]
+id = "beatstars"
+label = "FREE download: all my beats"
+url = "https://www.beatstars.com/samastano/tracks"
+use = "beat_video"
+platforms = ["facebook", "threads", "bluesky", "pinterest"]
+
+[[promo]]
+id = "drum-kit"
+label = "Bangers Only Drum Kit"
+url = "https://www.beatstars.com/samastano/sound-kits/159857"
+use = "keyword"
+keywords = ["drum kit", "drumkit", "sound kit", "bangers only"]
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+
+[[promo]]
+id = "workbook"
+label = "Finish More Beats Workbook (38-page PDF)"
+url = "https://whop.com/samastano-beats/hip-hop-trap-beat-production-workbook-38-pages-fillable-pdf/"
+use = "manual"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+
+[[promo]]
+id = "dark-streets-free"
+label = "DARK STREETS free beat tape"
+url = "https://samastano.bandcamp.com/album/dark-streets-free"
+use = "manual"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+
+[[promo]]
+id = "dark-streets"
+label = "DARK STREETS (untagged)"
+url = "https://samastano.bandcamp.com/album/dark-streets"
+use = "manual"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]
+
+[[promo]]
+id = "beats-channel"
+label = "Samastano Beats on YouTube"
+url = "https://www.youtube.com/@SamastanoBeats"
+use = "manual"
+platforms = ["youtube", "facebook", "threads", "bluesky", "pinterest"]

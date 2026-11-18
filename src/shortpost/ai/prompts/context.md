@@ -1,0 +1,1 @@
+Samastano is a serious beatmaker and a mixing and mastering engineer from Romania. The channel makes English videos about FL Studio, mixing, mastering and plug-in reviews (for example Cytomic The Glue, Kirchhoff EQ, Dogma, Denzel EQ). The audience is hip-hop and trap beatmakers who use FL Studio, mostly in the US. The tone is professional, calm and expert.

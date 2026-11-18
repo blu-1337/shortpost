@@ -1,0 +1,147 @@
+[general]
+local_tz = "Europe/Bucharest"
+target_tz = "America/New_York"
+watch_dirs = ["inbox"]
+video_exts = [".mp4", ".mov"]
+auto_approve = false
+library_dir = "library"
+db_path = "data/shortpost.sqlite3"
+log_dir = "logs"
+
+[media]
+compat_platforms = ["facebook", "instagram", "bluesky", "pinterest", "tiktok"]
+compat_crf = 20
+compat_maxrate = "12M"
+compat_max_fps = 60
+compat_skip_if_h264_8bit = true
+trim_black_start = true     # a black first frame becomes the automatic thumbnail: cut it off the library copy
+black_max_s = 0.5           # longer black at the start is treated as intentional and left alone
+cover_text = true           # burn the AI cover line into the first frames, but only if the local vision model sees no title there
+cover_seconds = 1.8
+cover_ms = 0                # which frame is the cover on Instagram, Facebook and TikTok (ms into the video; the black start is already trimmed)
+
+[series]
+detect = true
+title_suffix = " (Part {n}/{of})"
+consecutive_days = true
+
+[stories]
+# Also post the Short as a Story right after the Reel is live. The APIs have no link sticker, so the clip gets
+# "Link in bio - <[links].hub_text>" burned in by ffmpeg (library/<video>/video_story.mp4).
+enabled = true
+platforms = ["instagram", "facebook"]
+max_seconds = 59
+
+[schedule]
+posts_per_day = 1
+native_time = "18:30"
+native_jitter_minutes = 7
+local_time = "20:00"
+local_jitter_minutes = 10
+min_lead_minutes = 90
+max_catch_up_hours = 20
+respect_youtube_schedule = true
+count_long_videos = false
+upload_ahead_days_max = 28
+
+[ai]
+host = "http://localhost:11434"
+model = "gemma4:12b"
+fallback_model = "qwen3.5:9b"
+providers = ["gemini", "ollama"]       # tried in this order; Gemini needs the gemini_api_key secret, any failure drops to the local models
+gemini_model = "gemini-3.5-flash"     # VERIFY free-tier limits in AI Studio; "gemini-flash-latest" would follow Google's newest
+gemini_timeout_s = 120
+think = false
+num_ctx = 8192
+temperature = 0.6
+seed = 0
+timeout_s = 600
+
+[links]
+channel = "https://www.youtube.com/@samastano"
+hub = "https://links.medianopol.com/"
+hub_text = "links.medianopol.com"
+beats_channel = "https://www.youtube.com/@SamastanoBeats"
+business_email = "samastano@medianopol.com"
+link_in_bio_cta = "🔗 Plugin deals + free workbook: link in bio"
+disclosure_long = "Some links are affiliate links. I may earn a commission at no extra cost to you."
+disclosure_short = "(affiliate link)"
+
+[hashtags]
+brand = ["flstudio", "vstplugins", "mixing"]
+beat_only = ["trap", "hiphop", "beats"]
+
+[platforms.youtube]
+enabled = true
+mode = "browser"
+audit_approved = false
+category_id = "10"
+title_min = 40
+title_max = 65
+title_hard_max = 100
+description_max = 5000
+hashtags = 3
+tags_min = 8
+tags_max = 60
+related_video = true                  # D-015: AI picks the long video for Studio's "Related video"
+tags_extra = ["fl studio", "fl studio plugins", "fl studio tutorial", "vst plugin", "vst plugins",  "plugin review", "mixing", "mixing tips", "mastering", "music production", "beatmaker", "beat making", "producer tips", "audio plugins", "daw plugins", "home studio", "music producer", "sound design", "shorts"]
+tags_total_chars = 500
+add_shorts_hashtag = false
+made_for_kids = false
+default_language = "en"
+chrome_profile = "youtube"
+cdp_port = 9333
+
+[platforms.facebook]
+enabled = true
+mode = "native"
+max_seconds = 90
+overlength = "variant_or_trim"
+description_max = 250
+hashtags = 3
+first_comment_link = false   # Meta refuses comments (#12 on post_id, #200 pages_read_user_content on video id); 2026-11-08
+
+[platforms.instagram]
+enabled = true
+mode = "local_time"
+caption_max = 2200
+hashtags = 3
+share_to_feed = true
+max_seconds = 180
+
+[platforms.tiktok]
+enabled = true
+mode = "inbox"
+caption_max = 2200
+caption_target = 300
+hashtags = 4
+push_caption = true
+direct_post = true                     # D-017: Direct Post when the UI saved settings AND TikTok allows it; else inbox draft
+
+[platforms.threads]
+enabled = true
+mode = "local_time"
+text_max = 500
+hashtags = 1
+post_type = "link"                     # "link" = text post with the Reel link; "video" needs a public URL (Meta CDN URLs are rejected, §6)
+
+[platforms.bluesky]
+enabled = true
+mode = "local_time"
+text_max_graphemes = 300
+hashtags = 2
+
+[platforms.pinterest]
+enabled = false
+mode = "local_time"
+board = "Samastano - Plugin Reviews"
+title_max = 100
+description_max = 500
+hashtags = 1
+
+[meta]
+graph_version = "v26.0"
+
+[notify]
+ntfy_server = "https://ntfy.sh"
+toast = false

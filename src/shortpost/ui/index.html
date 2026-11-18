@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShortPost</title>
+<style>
+:root{--bg:#fff9f3;--ink:#1f1412;--card:#fff;--line:#e7d9cc;--red:#bb0000;--orange:#ff8000;--mute:#7a6a62;--ok:#1a7f37;--bad:#b42318;--warn:#9a6700}
+@media (prefers-color-scheme:dark){:root{--bg:#171210;--ink:#f3e9e2;--card:#221a17;--line:#3a2d27;--mute:#a8978d;--ok:#4cc26a;--bad:#ff7b72;--warn:#e3b341}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:2;flex-wrap:wrap}
+h1{font:700 20px Georgia,serif;margin:0;color:var(--red)}
+nav button{background:none;border:0;padding:6px 12px;font:inherit;color:var(--mute);cursor:pointer;border-bottom:2px solid transparent}
+nav button.on{color:var(--ink);border-color:var(--orange)}
+main{max-width:1000px;margin:0 auto;padding:16px 16px 96px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+button.b{background:var(--red);color:#fff;border:0;border-radius:6px;padding:7px 14px;font:inherit;cursor:pointer}
+button.b.dark{background:#7a0c0c;color:#fff}
+button.b.bad-b{background:var(--bad);color:#fff}
+button.b.alt{background:none;color:var(--ink);border:1px solid var(--line)}
+button.b:disabled{opacity:.5;cursor:default}
+input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+textarea{min-height:90px;resize:vertical}
+input[type=checkbox]{width:18px;height:18px;padding:0;margin:0;flex:none;accent-color:var(--orange);cursor:pointer}
+label.switch{display:flex;align-items:center;gap:10px;margin:2px 0 16px;padding:10px 14px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--ink);cursor:pointer;width:fit-content;max-width:100%}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;border:1px solid var(--line);font-size:12px;margin:0 4px 4px 0}
+.s-published{color:var(--ok)}.s-failed,.s-missed{color:var(--bad)}.s-scheduled{color:var(--orange)}
+.mute{color:var(--mute);font-size:13px}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.name{background:#fff3c4;color:#000;border:2px solid var(--orange);padding:10px;border-radius:8px;margin:10px 0}
+.name input{font-size:18px;font-weight:700}
+pre{white-space:pre-wrap;word-break:break-word;font:12px/1.4 ui-monospace,Consolas,monospace;margin:0}
+a{color:var(--orange)}
+</style>
+</head>
+<body>
+<header>
+  <h1>ShortPost</h1>
+  <nav id="nav"></nav>
+  <span class="mute grow" id="status"></span>
+</header>
+<main id="main"></main>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+}
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'X-ShortPost': '1', 'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+const TABS = ['Queue', 'New', 'Failures', 'Log'];
+let tab = 'Queue', draftId = null;
+function nav() {
+  const n = $('#nav'); n.replaceChildren(...TABS.map(t => el('button', {class: t === tab ? 'on' : '', onclick: () => { tab = t; draftId = null; render(); }}, t)));
+}
+function say(m) { $('#status').textContent = m; }
+async function syncNow(reslot) {
+  try {
+    const {job} = await api('/api/sync', {});
+    const lines = await waitJob(job, 'Sync');
+    if (reslot && draftId) { const r = await api(`/api/draft/${draftId}/reslot`, {}); say(`Synced (${lines.length} occupied day(s) on YouTube). Slot day: ${r.day}`); }
+    else say(`Synced: ${lines.length} occupied day(s) on YouTube.`);
+  } catch (e) { say('Sync error: ' + e.message); }
+  render();
+}
+
+async function postNow(id) {
+  if (!confirm('Post #' + id + ' NOW on Instagram, Threads, Bluesky and TikTok (ignores the schedule)? YouTube and Facebook stay on their own schedule.')) return;
+  try {
+    const {job} = await api(`/api/video/${id}/postnow`, {});
+    const lines = await waitJob(job, 'Post now');
+    say('Post now finished: ' + (lines.length ? lines.join(' | ') : 'nothing due'));
+  } catch (e) { say('Post now error: ' + e.message); }
+  render();
+}
+let player = null;  // the one video that may play at a time
+function playVideo(id, box, btn) {
+  const same = player && player.box === box;
+  if (player) { player.video.pause(); player.video.removeAttribute('src'); player.video.load(); player.box.textContent = ''; player.btn.textContent = 'Play video'; player = null; }
+  if (same) return;
+  const video = el('video', {controls: true, autoplay: true, playsinline: true, style: 'width:auto;max-width:100%;max-height:70vh;margin-top:8px;border-radius:8px;display:block'});
+  video.src = `/api/video/${id}/file`;
+  box.append(video); btn.textContent = 'Close video';
+  player = {video, box, btn};
+}
+async function waitJob(id, label) {
+  for (;;) {
+    const j = await api('/api/job/' + id);
+    say(label + ': ' + (j.log.slice(-1)[0] || 'working...'));
+    if (j.state !== 'running') { if (j.state === 'error') throw new Error(j.error); return j.result; }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+// Jobs run inside the server, so a page refresh must pick them up again: show running ones and re-render when they finish.
+let watching = false;
+async function watchJobs() {
+  if (watching) return;
+  watching = true;
+  let sawRunning = false, failed = '';
+  try {
+    for (;;) {
+      const s = await api('/api/state');
+      const run = s.jobs.filter(j => j.state === 'running');
+      failed = s.jobs.filter(j => j.state === 'error').map(j => `${j.label} FAILED: ${j.error}`).join(' | ');
+      if (!run.length) break;
+      sawRunning = true;
+      say(run.map(j => `${j.label}: ${j.last || 'working...'}`).join(' | '));
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  } catch (e) { /* server briefly unreachable: stop watching */ } finally { watching = false; }
+  // re-render only when a job was seen running and has now finished (never otherwise: that would loop)
+  if (sawRunning && !document.activeElement.matches('input,textarea')) { say(failed || 'Job finished.'); render(); }
+}
+function saveLoc() { try { history.replaceState(null, '', '#' + tab + (draftId ? '/' + draftId : '')); } catch (e) {} }
+function loadLoc() { const [t, d] = location.hash.slice(1).split('/'); if (TABS.includes(t)) tab = t; if (d) draftId = d; }
+loadLoc();
+
+async function render() {
+  nav(); saveLoc(); watchJobs();
+  const m = $('#main'); m.replaceChildren();
+  try {
+    if (draftId) return await viewDraft(m);
+    if (tab === 'Queue') return await viewQueue(m);
+    if (tab === 'New') return await viewNew(m);
+    if (tab === 'Failures') return await viewFailures(m);
+    if (tab === 'Log') { const j = await api('/api/log'); m.append(el('pre', {}, j.log)); }
+  } catch (e) { m.append(el('div', {class: 'card bad'}, String(e.message || e))); }
+}
+
+async function viewQueue(m) {
+  const s = await api('/api/state');
+  m.append(el('div', {class: 'row', style: 'margin-bottom:12px'}, el('button', {class: 'b alt', onclick: () => syncNow(false)}, 'Sync YouTube'), el('span', {class: 'mute'}, 'reads Studio so days with a Short already scheduled there are skipped')));
+  if (s.inbox.length) m.append(el('div', {class: 'card'}, `${s.inbox.length} video(s) waiting in the inbox. `, el('button', {class: 'b', onclick: () => { tab = 'New'; render(); }}, 'Review them')));
+  if (!s.videos.length) m.append(el('div', {class: 'mute'}, 'Nothing queued.'));
+  for (const v of s.videos) {
+    const posts = v.posts.map(p => el('div', {class: 'row'},
+      el('b', {}, p.platform), el('span', {class: 's-' + p.state}, p.state), el('span', {class: 'mute grow'}, p.when),
+      /^https?:/.test(p.url || '') ? el('a', {href: p.url, target: '_blank', rel: 'noopener'}, 'open') : (p.platform === 'tiktok' && p.state === 'published' && p.url ? el('b', {style: 'color:#ff8000'}, 'DRAFT in the TikTok app Inbox: finish and post it there') : null),
+      p.platform === 'tiktok' && ['published', 'failed', 'pending'].includes(p.state) ? el('button', {class: 'b alt', onclick: async () => { if (!confirm('Send this video to TikTok again? A new draft appears in your TikTok Inbox (an older draft of it stays there until you delete it).')) return; try { const {job} = await api(`/api/video/${v.id}/tiktokresend`, {}); say('Sending to TikTok in the background; progress shows here.'); await waitJob(job, 'TikTok resend'); say('TikTok: sent again.'); } catch (e) { say('Error: ' + e.message); } render(); }}, 'Resend to TikTok') : null,
+      p.tt_open ? el('button', {class: 'b', onclick: async () => { await api(`/api/video/${v.id}/tiktokdone`, {}); say('Marked. The next TikTok draft goes out within 15 minutes.'); render(); }}, 'TikTok posted') : null,
+      p.error ? el('span', {class: 'bad'}, p.error.slice(0, 140)) : null));
+    const dateIn = el('input', {type: 'date', value: v.day, style: 'width:auto'});
+    const playBox = el('div');
+    const playBtn = el('button', {class: 'b alt', onclick: () => playVideo(v.id, playBox, playBtn)}, 'Play video');
+    m.append(el('div', {class: 'card'},
+      el('div', {class: 'row'}, el('b', {class: 'grow'}, `#${v.id} ${v.topic}` + (v.part ? ` (part ${v.part})` : '')), el('span', {class: 'mute'}, `${v.day} NY · ${v.state}`)),
+      posts,
+      playBox,
+      el('div', {class: 'row', style: 'margin-top:8px'}, playBtn, dateIn,
+        el('button', {class: 'b alt', onclick: () => act(`/api/video/${v.id}/reschedule`, {date: dateIn.value})}, 'Reschedule'),
+        el('button', {class: 'b', onclick: () => postNow(v.id)}, 'Post now'),
+        el('button', {class: 'b alt', onclick: () => act(`/api/video/${v.id}/retry`, {})}, 'Retry failed'),
+        el('button', {class: 'b alt', onclick: () => confirm('Cancel the pending posts of #' + v.id + '?') && act(`/api/video/${v.id}/cancel`, {})}, 'Cancel pending'),
+        el('button', {class: 'b alt', onclick: () => editSaved(v.id, m)}, 'Edit text'),
+        el('button', {class: 'b alt bad', onclick: () => removeVideo(v)}, 'Remove video'))));
+  }
+}
+async function removeVideo(v) {
+  const {lines} = await api(`/api/video/${v.id}/removeplan`, {});
+  if (!lines.length) { say('Nothing to remove.'); return; }
+  const NL = String.fromCharCode(10);
+  if (!confirm('Remove #' + v.id + ' ' + v.topic + '?' + NL + NL + lines.map(l => '- ' + l).join(NL) + NL + NL + 'Deleting is permanent. Continue?')) return;
+  try {
+    const {job} = await api(`/api/video/${v.id}/remove`, {});
+    const res = await waitJob(job, 'Remove');
+    alert('Result:' + NL + NL + res.join(NL));
+  } catch (e) { say('Error: ' + e.message); }
+  render();
+}
+async function act(path, body) {
+  try { const j = await api(path, body); say(j.message || (j.messages || []).join('; ') || ('done' + (j.reset != null ? ` (${j.reset} reset)` : ''))); } catch (e) { say('Error: ' + e.message); }
+  render();
+}
+
+async function editSaved(id, m) {
+  const j = await api('/api/video/' + id);
+  const box = el('div', {class: 'card'}, el('b', {}, `Text of #${id}`), el('div', {class: 'mute'}, `Editable (not uploaded yet): ${j.open.join(', ') || 'none'}. Already uploaded: ${j.uploaded.join(', ') || 'none'}.`));
+  for (const [p, r] of Object.entries(j.rendered)) {
+    const ok = j.open.includes(p);
+    for (const f of ['title', 'text']) {
+      if (r[f] == null) continue;
+      const t = el(f === 'title' ? 'input' : 'textarea', {}); t.value = r[f]; t.disabled = !ok;
+      box.append(el('div', {class: 'mute'}, `${p} ${f}`), t, ok ? el('button', {class: 'b alt', onclick: async () => { const x = await api(`/api/video/${id}/text`, {platform: p, field: f, value: t.value}); say(x.message); }}, 'Save') : null);
+    }
+  }
+  m.prepend(box); box.scrollIntoView();
+}
+
+async function handlesPanel(m, s) {
+  const {handles} = await api('/api/handles');
+  const box = el('div', {class: 'card'});
+  box.append(el('b', {}, 'Handles'), el('div', {class: 'mute'}, 'Paste one or several handles per platform (separated by spaces, commas or new lines). Apply adds them at the end of the YouTube, Facebook, Instagram and TikTok text and remembers the set.'));
+  const f = {name: el('input', {placeholder: 'Name of this set (for you, e.g. Manley plugins)'})};
+  for (const [k, ph] of [['youtube', '@YouTube handles'], ['facebook', '@Facebook handles'], ['instagram', '@Instagram handles'], ['tiktok', '@TikTok handles']]) f[k] = el('textarea', {placeholder: ph, rows: 2});
+  const sel = el('select', {}, el('option', {value: ''}, handles.length ? 'Saved sets: pick one to reuse...' : 'No saved sets yet'), ...handles.map(h => el('option', {value: h.id}, h.name)));
+  sel.addEventListener('change', () => { const h = handles.find(x => x.id === sel.value); if (!h) return; f.name.value = h.name; for (const p of ['youtube', 'facebook', 'instagram', 'tiktok']) f[p].value = (h[p] || []).join(' '); });
+  const get = () => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value]));
+  box.append(el('div', {class: 'row', style: 'margin-top:8px'}, sel,
+    el('button', {class: 'b alt', onclick: async () => { if (!sel.value || !confirm('Delete this saved set?')) return; await api('/api/handles/delete', {id: sel.value}); render(); }}, 'Delete set')),
+    f.name, f.youtube, f.facebook, f.instagram, f.tiktok,
+    el('button', {class: 'b alt', onclick: async () => { try { await api('/api/handles/save', get()); say('Set saved.'); } catch (e) { say('Error: ' + e.message); return; } render(); }}, 'Save set'));
+  const ds = new Set();
+  if (s.drafts.length) {
+    box.append(el('div', {class: 'mute', style: 'margin-top:8px'}, 'Apply to these drafts:'));
+    for (const d of s.drafts) {
+      const c = el('input', {type: 'checkbox', style: 'width:auto;margin-right:6px'});
+      c.addEventListener('change', () => c.checked ? ds.add(d.id) : ds.delete(d.id));
+      box.append(el('label', {style: 'display:block;margin:4px 0'}, c, d.file + (d.pre ? '  (pre-approved)' : '')));
+    }
+    box.append(el('button', {class: 'b', style: 'margin-top:8px', onclick: async () => {
+      if (!ds.size) { say('Tick at least one draft.'); return; }
+      try {
+        const {result} = await api('/api/handles/apply', {...get(), drafts: [...ds]});
+        say(Object.entries(result).map(([fl, r]) => fl + ': ' + (Object.entries(r).map(([p, v]) => (p[0] === '!' ? p.slice(1) + ' too long, skipped' : p) + ' ' + v.join(' ')).join('; ') || 'nothing to add (already there)')).join(' | ') + '  (set saved for reuse)');
+      } catch (e) { say('Error: ' + e.message); }
+    }}, 'Apply'));
+  }
+  m.append(box);
+}
+
+function autoOpen() { try { return localStorage.getItem('autoOpenDraft') !== '0'; } catch (e) { return true; } }
+async function viewNew(m) {
+  const s = await api('/api/state');
+  const sw = el('input', {type: 'checkbox'});
+  sw.checked = autoOpen();
+  sw.addEventListener('change', () => { try { localStorage.setItem('autoOpenDraft', sw.checked ? '1' : '0'); } catch (e) {} });
+  m.append(el('label', {class: 'switch'}, sw, el('span', {}, 'Open the draft automatically when the text is ready')));
+  (s.notes || []).forEach(n => m.append(el('div', {class: 'card warn'}, n)));
+  await handlesPanel(m, s);
+  for (const d of s.drafts.filter(x => x.pre)) {
+    const go = async (now) => {
+      if (!confirm(now ? 'POST NOW? This goes public immediately: Instagram, Facebook, Threads, Bluesky and TikTok right away, YouTube about 30 minutes from now (Studio can only schedule). Continue?'
+                       : 'Schedule this post? The next free day is picked now. YouTube/Facebook upload now; the others post at their time. Nothing goes public before its slot.')) return;
+      try { await api(`/api/draft/${d.id}/approve`, {now}); say((now ? 'Posting' : 'Scheduling') + ' in the background. Progress shows here.'); } catch (e) { say('Error: ' + e.message); }
+      render();
+    };
+    m.append(el('div', {class: 'card'}, el('div', {class: 'row'}, el('b', {class: 'grow'}, `Pre-approved: ${d.file}`)),
+      el('div', {class: 'row', style: 'margin-top:8px'},
+        el('button', {class: 'b alt', onclick: () => { draftId = d.id; render(); }}, 'Edit'),
+        el('button', {class: 'b bad-b', onclick: () => go(true)}, 'Post now'),
+        el('button', {class: 'b', onclick: () => go(false)}, 'Schedule post'),
+        el('button', {class: 'b alt', onclick: async () => { if (!confirm('Discard this pre-approved draft? The video stays in the inbox; the written text is deleted.')) return; try { await api(`/api/draft/${d.id}/discard`, {}); } catch (e) { say('Error: ' + e.message); } render(); }}, 'Discard'))));
+  }
+  for (const d of s.drafts.filter(x => !x.pre)) m.append(el('div', {class: 'card row'}, el('b', {class: 'grow'}, `Draft: ${d.file}`), el('button', {class: 'b', onclick: () => { draftId = d.id; render(); }}, 'Open')));
+  if (!s.inbox.length && !s.drafts.length) m.append(el('div', {class: 'mute'}, 'The inbox is empty. Drop a vertical video into the inbox folder.'));
+  const busy = new Set([...s.drafts.map(d => d.file), ...s.jobs.filter(j => j.state === 'running').map(j => j.label.replace(/^Draft /, ''))]);
+  for (const f of s.inbox.filter(f => !busy.has(f.name))) {
+    const hint = el('input', {placeholder: 'Optional hint for the AI (e.g. mention 808s)'});
+    const b = el('button', {class: 'b', onclick: async () => {
+      b.disabled = true;
+      try { const {job} = await api('/api/draft', {path: f.path, hint: hint.value}); const id = await waitJob(job, 'Draft'); say(autoOpen() ? '' : 'Draft ready: click Open on it below.'); if (autoOpen()) draftId = id; } catch (e) { say('Error: ' + e.message); b.disabled = false; return; }
+      render();
+    }}, 'Write text');
+    m.append(el('div', {class: 'card'}, el('div', {class: 'row'}, el('b', {class: 'grow'}, f.name), b), hint));
+  }
+}
+
+// TikTok Direct Post settings: follows TikTok's content sharing guidelines (no defaults, creator info from TikTok, disclosure, consent).
+function tiktokPanel(saved) {
+  const box = el('div', {class: 'name', style: 'background:transparent;border-style:dashed'});
+  const out = el('div', {class: 'mute'});
+  box.append(el('b', {}, 'TikTok: post automatically (Direct Post)'),
+    el('div', {class: 'mute'}, 'Without these settings the video goes to your TikTok inbox as a draft (the old way). Until TikTok approves the app, Direct Post falls back to the draft.'));
+  const body = el('div', {}); box.append(body, out);
+  if (saved) out.textContent = 'Saved: ' + JSON.stringify(saved);
+  const load = el('button', {class: 'b alt', onclick: async () => {
+    load.disabled = true; out.textContent = 'Asking TikTok for the account details...';
+    let cr;
+    try { cr = await api('/api/tiktok/creator'); } catch (e) { out.textContent = 'TikTok: ' + e.message + ' (run "shortpost auth tiktok" again so video.publish is granted)'; load.disabled = false; return; }
+    out.textContent = ''; load.remove(); body.replaceChildren();
+    const cb = (label, dis) => { const i = el('input', {type: 'checkbox'}); i.disabled = !!dis; return [i, el('label', {style: 'display:block;margin:4px 0'}, i, ' ' + label)]; };
+    const LAB = {PUBLIC_TO_EVERYONE: 'Everyone', MUTUAL_FOLLOW_FRIENDS: 'Friends', FOLLOWER_OF_CREATOR: 'Followers', SELF_ONLY: 'Only me'};
+    const sel = el('select', {}, el('option', {value: ''}, 'Choose who can view this video...'), ...(cr.privacy_level_options || []).map(o => el('option', {value: o}, LAB[o] || o)));
+    const [comment, rc] = cb('Allow comments', cr.comment_disabled), [duet, rd] = cb('Allow duets', cr.duet_disabled), [stitch, rs] = cb('Allow stitches', cr.stitch_disabled);
+    const [disc, rdisc] = cb('Content disclosure setting (this video promotes a brand or product)');
+    const [mine, rm] = cb('Your brand (labelled "Promotional content")'), [branded, rb] = cb('Branded content (labelled "Paid partnership")');
+    const sub = el('div', {style: 'margin-left:20px;display:none'}, rm, rb);
+    const decl = el('div', {class: 'mute'});
+    const sync = () => {
+      sub.style.display = disc.checked ? 'block' : 'none';
+      const priv = sel.value === 'SELF_ONLY';
+      branded.disabled = priv; if (priv) branded.checked = false;
+      [...sel.options].forEach(o => { o.disabled = o.value === 'SELF_ONLY' && branded.checked; });
+      const musicA = '<a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank">Music Usage Confirmation</a>', bcA = '<a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank">Branded Content Policy</a>';
+      decl.innerHTML = 'By posting, you agree to TikTok’s ' + (disc.checked && branded.checked ? bcA + ' and ' : '') + musicA + '.' + (priv ? '' : '');
+      go.disabled = !(sel.value && cons.checked && (!disc.checked || mine.checked || branded.checked));
+      go.title = disc.checked && !mine.checked && !branded.checked ? 'You need to indicate if your content promotes yourself, a third party, or both.' : (branded.disabled && priv ? 'Branded content visibility cannot be set to private.' : '');
+    };
+    const [cons, rcons] = cb('I have checked the text above and I agree to post this video to TikTok with these settings.');
+    const go = el('button', {class: 'b', onclick: async () => {
+      try {
+        const r = await api(`/api/draft/${draftId}/tiktok`, {privacy: sel.value, comment: comment.checked, duet: duet.checked, stitch: stitch.checked, disclose: disc.checked, your_brand: mine.checked, branded: branded.checked, consented: cons.checked});
+        out.textContent = 'Saved. TikTok will be posted automatically at its slot time.';
+        if (!box.querySelector('.tt-now')) box.append(el('button', {class: 'b tt-now', onclick: async (ev) => {
+          ev.target.disabled = true; out.textContent = 'Sending the video to TikTok...';
+          try { const {job} = await api(`/api/draft/${draftId}/tiktok_post`, {}); const res = await waitJob(job, 'TikTok'); out.textContent = 'TikTok answered: ' + JSON.stringify(res); }
+          catch (e) { out.textContent = 'TikTok post failed: ' + e.message; ev.target.disabled = false; }
+        }}, 'Post this video to TikTok now'));
+      } catch (e) { out.textContent = 'Not saved: ' + e.message; }
+    }}, 'Save TikTok settings');
+    const off = el('button', {class: 'b alt', onclick: async () => { await api(`/api/draft/${draftId}/tiktok`, {clear: true}); out.textContent = 'Direct Post off: inbox draft will be used.'; }}, 'Use inbox draft instead');
+    [sel, disc, mine, branded, cons].forEach(x => x.addEventListener('change', sync));
+    body.append(el('div', {}, `Posting to: ${cr.creator_nickname || ''} (@${cr.creator_username || ''})` + (cr.max_video_post_duration_sec ? ` · max ${cr.max_video_post_duration_sec}s` : '')),
+      sel, rc, rd, rs, rdisc, sub, decl, rcons, el('div', {class: 'row'}, go, off));
+    sync();
+  }}, 'Set up automatic TikTok posting');
+  body.append(load);
+  return box;
+}
+
+async function viewDraft(m) {
+  const d = await api('/api/draft/' + draftId);
+  m.append(el('div', {class: 'card'},
+    el('div', {class: 'row'}, el('b', {class: 'grow'}, d.file), el('span', {class: 'mute'}, d.media)),
+    el('div', {}, 'Topic: ', d.topic, d.series ? ` · part ${d.series.part} of ${d.series.of}` : ''),
+    el('div', {class: 'row'}, 'Slot day (New York): ', el('b', {}, d.day), el('button', {class: 'b alt', onclick: () => syncNow(true)}, 'Sync YouTube and re-pick day')),
+    el('div', {class: 'mute'}, `AI: ${d.source}${d.model ? ' (' + d.model + ')' : ''}`),
+    d.source === 'template' ? el('div', {class: 'warn'}, 'AI fallback: template-only text, please edit or regenerate') : null,
+    d.warnings.map(w => el('div', {class: 'warn'}, 'warning: ' + w))));
+  // the plugin-name check (the "Vatrical" lesson): large and highlighted, fixes every platform at once
+  for (const p of d.products) {
+    const inp = el('input', {value: p});
+    m.append(el('div', {class: 'name'}, el('div', {}, 'CHECK THE PLUGIN NAME (taken from the filename; every post uses it exactly)'),
+      el('div', {class: 'row'}, inp, el('button', {class: 'b', onclick: async () => {
+        if (inp.value === p) return say('Same spelling, nothing to change.');
+        const r = await api(`/api/draft/${draftId}/product`, {old: p, new: inp.value}); say(`Replaced ${r.replaced} place(s).`); render();
+      }}, 'Fix everywhere'))));
+  }
+  for (const [p, r] of Object.entries(d.platforms)) {
+    const c = el('div', {class: 'card'}, el('div', {class: 'row'}, el('b', {class: 'grow'}, r.label), el('span', {class: 'mute'}, r.when)));
+    if (r.focus) c.append(el('div', {class: 'mute'}, 'focus keyword: ' + r.focus));
+    const field = (f, tag) => { const t = el(tag, {}); t.value = r[f]; t.addEventListener('change', () => api(`/api/draft/${draftId}/edit`, {platform: p, field: f, value: t.value}).catch(e => say('Error: ' + e.message))); return t; };
+    if (r.title != null) c.append(el('div', {class: 'mute'}, 'title'), field('title', 'input'));
+    c.append(el('div', {class: 'mute'}, 'text'), field('text', 'textarea'));
+    if (r.tags) c.append(el('div', {class: 'mute'}, 'tags'), el('div', {}, r.tags.map(t => el('span', {class: 'tag'}, t))));
+    if (r.related) c.append(el('div', {}, el('b', {}, 'Related video: '), r.related.title, el('span', {class: 'mute'}, ` (${r.related.by}: ${r.related.reason})`)));
+    if (r.comment) c.append(el('div', {class: 'mute'}, 'first comment: ' + r.comment));
+    if (r.link) c.append(el('div', {class: 'mute'}, 'pin link: ' + r.link));
+    r.warnings.forEach(w => c.append(el('div', {class: 'warn'}, w)));
+    if (p === 'tiktok') c.append(tiktokPanel(r.direct));
+    m.append(c);
+  }
+  const hint = el('input', {placeholder: 'Hint for a new version (optional)'});
+  const approve = el('button', {class: 'b', onclick: async () => {
+    if (!confirm(`Approve and queue for ${d.day}? YouTube/Facebook upload now; the others post at their time. Nothing goes public before its slot.`)) return;
+    approve.disabled = true;
+    try { await api(`/api/draft/${draftId}/approve`, {}); say('Approving in the background. Upload progress shows here; you can start the next video.'); draftId = null; tab = 'New'; } catch (e) { say('Error: ' + e.message); approve.disabled = false; return; }
+    render();
+  }}, 'Approve and queue');
+  const approveNow = el('button', {class: 'b bad', onclick: async () => {
+    if (!confirm('POST NOW? This goes public immediately: Instagram, Facebook, Threads, Bluesky and TikTok right away, YouTube about 30 minutes from now (Studio can only schedule). Continue?')) return;
+    approve.disabled = approveNow.disabled = true;
+    try { await api(`/api/draft/${draftId}/approve`, {now: true}); say('Posting in the background. Progress shows here; you can start the next video.'); draftId = null; tab = 'New'; } catch (e) { say('Error: ' + e.message); approve.disabled = approveNow.disabled = false; return; }
+    render();
+  }}, 'Approve and post now');
+  const pre = el('button', {class: 'b dark', onclick: async () => {
+    try { await api(`/api/draft/${draftId}/preapprove`, {}); say('Pre-approved. It waits in the New tab: Edit, Post now or Schedule post.'); draftId = null; tab = 'New'; } catch (e) { say('Error: ' + e.message); return; }
+    render();
+  }}, 'Pre-approve');
+  m.append(el('div', {class: 'card'}, d.pre ? el('div', {class: 'mute'}, 'This draft is pre-approved. Pre-approve again to save your edits and go back.') : '', hint, el('div', {class: 'row', style: 'margin-top:8px'}, pre, approve, approveNow,
+    el('button', {class: 'b alt', onclick: async () => { try { const {job} = await api(`/api/draft/${draftId}/regen`, {hint: hint.value}); await waitJob(job, 'Regenerate'); say(''); } catch (e) { say('Error: ' + e.message); } render(); }}, 'Regenerate all'),
+    el('button', {class: 'b alt', onclick: async () => { await api(`/api/draft/${draftId}/discard`, {}); draftId = null; tab = 'New'; render(); }}, 'Discard'))));
+}
+
+async function viewFailures(m) {
+  const f = await api('/api/failures');
+  if (!f.length) m.append(el('div', {class: 'mute'}, 'No failed or missed posts.'));
+  for (const x of f) m.append(el('div', {class: 'card'}, el('div', {class: 'row'}, el('b', {class: 'grow'}, `#${x.video} ${x.topic} · ${x.platform}`), el('span', {class: 's-' + x.state}, x.state + ` (${x.attempts} tries)`),
+    x.state === 'failed' ? el('button', {class: 'b alt', onclick: () => act(`/api/video/${x.video}/retry`, {platform: x.platform})}, 'Retry') : null), el('pre', {}, x.error || '')));
+}
+render();
+setInterval(() => { if (!draftId && tab === 'Queue' && !document.activeElement.matches('input,textarea')) render(); }, 60000);
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+[project]
+name = "shortpost"
+version = "0.1.0"
+description = "Local multi-platform Shorts poster for Samastano"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx",
+    "jsonschema",
+    "tzdata",
+    "rich",
+    "regex",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "playwright",
+    "atproto",
+]
+
+[project.scripts]
+shortpost = "shortpost.cli:main"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shortpost"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

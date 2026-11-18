@@ -1,0 +1,4 @@
+{text}
+
+{link_line}
+{hashtags}
