@@ -1,6 +1,0 @@
-<?php
-// Copy to /www/shortpost-relay-private/config.php on the host (OUTSIDE the site's web folder). Never commit the real file.
-return [
-    'client_key'    => 'PASTE_PRODUCTION_CLIENT_KEY',
-    'client_secret' => 'PASTE_PRODUCTION_CLIENT_SECRET',
-];

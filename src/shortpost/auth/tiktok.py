@@ -20,7 +20,7 @@ REDIRECT = "http://localhost:8766/callback/"
 FORM = {"Content-Type": "application/x-www-form-urlencoded"}
 # Public ShortPost relay (D-021): used when you have no own tiktok_client_secret. It only adds the app's client secret to
 # the token request and forwards it to TikTok; it stores nothing. Override with the secret `tiktok_relay_url`.
-RELAY_URL = "https://shortpost.medianopol.com/relay/token.php"
+RELAY_URL = "https://shortpost-relay.shortpost.workers.dev"
 
 
 def make_pkce() -> tuple[str, str]:

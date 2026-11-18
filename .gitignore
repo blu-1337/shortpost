@@ -14,5 +14,3 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .claude/
-shortpost-relay-private/
-relay-private/config.php
