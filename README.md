@@ -50,7 +50,7 @@ Short version:
 | YouTube | `shortpost auth youtube-browser`, log in to your Google account in the window that opens |
 | Facebook + Instagram | Meta app + system-user token, then `shortpost auth facebook` |
 | Threads | add yourself as Threads tester, paste a token into `shortpost auth threads` |
-| TikTok | developer app (sandbox), `set-secret tiktok_client_key/secret`, `shortpost auth tiktok` |
+| TikTok | `shortpost auth tiktok` (uses the public ShortPost relay by default; or set `tiktok_client_key/secret` from your own developer app) |
 | Bluesky | app password, `set-secret bluesky_handle/bluesky_app_password`, then set `platforms.bluesky.enabled = true` |
 | Pinterest | developer app, `set-secret pinterest_app_id/secret`, `shortpost auth pinterest`; enable only after Standard access |
 | Phone alerts | `shortpost set-secret ntfy_topic --generate`, subscribe to that topic in the ntfy app |

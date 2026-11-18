@@ -1,0 +1,4 @@
+Options -Indexes
+<FilesMatch "\.(example|inc)$">
+  Require all denied
+</FilesMatch>

@@ -18,6 +18,9 @@ TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 SCOPES = "user.info.basic,video.upload,video.publish"
 REDIRECT = "http://localhost:8766/callback/"
 FORM = {"Content-Type": "application/x-www-form-urlencoded"}
+# Public ShortPost relay (D-021): used when you have no own tiktok_client_secret. It only adds the app's client secret to
+# the token request and forwards it to TikTok; it stores nothing. Override with the secret `tiktok_relay_url`.
+RELAY_URL = "https://shortpost.medianopol.com/relay/token.php"
 
 
 def make_pkce() -> tuple[str, str]:
@@ -47,7 +50,30 @@ def _check(rec: dict, what: str) -> None:
         raise ValueError(f"tiktok {what} failed: {rec.get('error_description') or rec.get('error') or 'no token'}")
 
 
+def relay_url(secrets: dict) -> str | None:
+    """The relay is used only when no own client secret is configured."""
+    if secrets.get("tiktok_client_secret"):
+        return None
+    return secrets.get("tiktok_relay_url") or RELAY_URL
+
+
+def client_key(http: Http, secrets: dict) -> str:
+    if secrets.get("tiktok_client_key"):
+        return secrets["tiktok_client_key"]
+    url = relay_url(secrets)
+    key = (http.get(url) or {}).get("client_key") if url else None
+    if not key:
+        raise ValueError("no tiktok_client_key and the relay did not return one")
+    return key
+
+
 def exchange(http: Http, secrets: dict, code: str, verifier: str, redirect: str = REDIRECT) -> dict:
+    relay = relay_url(secrets)
+    if relay:
+        rec = http.post(relay, json={"grant_type": "authorization_code", "code": code,
+                                     "code_verifier": verifier, "redirect_uri": redirect})
+        _check(rec, "token exchange")
+        return _store(rec)
     rec = http.post(TOKEN_URL, headers=FORM, data={
         "client_key": secrets["tiktok_client_key"], "client_secret": secrets["tiktok_client_secret"],
         "code": code, "grant_type": "authorization_code", "redirect_uri": redirect, "code_verifier": verifier})
@@ -56,6 +82,12 @@ def exchange(http: Http, secrets: dict, code: str, verifier: str, redirect: str 
 
 
 def refresh(http: Http, secrets: dict, tok: dict) -> dict:
+    relay = relay_url(secrets)
+    if relay:
+        rec = http.post(relay, json={"grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
+        _check(rec, "refresh")
+        rec.setdefault("refresh_token", tok["refresh_token"])
+        return _store(rec)
     rec = http.post(TOKEN_URL, headers=FORM, data={
         "client_key": secrets["tiktok_client_key"], "client_secret": secrets["tiktok_client_secret"],
         "grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
@@ -66,9 +98,9 @@ def refresh(http: Http, secrets: dict, tok: dict) -> dict:
 
 def authorize(http: Http, secrets: dict, open_browser=None, timeout: int = 300) -> dict:
     """Interactive: print the URL, wait for the redirect on localhost:8766, exchange the code."""
-    for k in ("tiktok_client_key", "tiktok_client_secret"):
-        if not secrets.get(k):
-            raise ValueError(f"missing secret {k}: run `shortpost set-secret {k}`")
+    if secrets.get("tiktok_client_secret") and not secrets.get("tiktok_client_key"):
+        raise ValueError("missing secret tiktok_client_key: run `shortpost set-secret tiktok_client_key`")
+    key = client_key(http, secrets)
     verifier, challenge = make_pkce()
     state = pysecrets.token_urlsafe(16)
     got: dict = {}
@@ -86,7 +118,7 @@ def authorize(http: Http, secrets: dict, open_browser=None, timeout: int = 300) 
 
     srv = HTTPServer(("127.0.0.1", 8766), H)
     srv.timeout = timeout
-    url = auth_url(secrets["tiktok_client_key"], state, challenge)
+    url = auth_url(key, state, challenge)
     print("Open this URL, log in to TikTok and allow access:\n" + url)
     if open_browser:
         open_browser(url)

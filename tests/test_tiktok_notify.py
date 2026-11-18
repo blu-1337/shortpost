@@ -128,3 +128,29 @@ def test_recover_interrupted_uploads():
     out = runner.recover_interrupted(c, datetime.now(timezone.utc))
     st = {r["id"]: r["state"] for r in c.execute("SELECT id, state FROM posts")}
     assert st == {1: "pending", 2: "failed", 3: "uploading"} and len(out) == 2
+
+
+def test_relay_used_without_own_secret(tmp_path, monkeypatch):
+    import json
+    import httpx
+    from shortpost import tokens
+    from shortpost.http import Http
+
+    monkeypatch.setattr(tokens, "save", lambda name, rec: None)
+    seen = []
+
+    def handler(req: httpx.Request):
+        seen.append((req.method, str(req.url), req.content))
+        if req.method == "GET":
+            return httpx.Response(200, json={"client_key": "pubkey"})
+        return httpx.Response(200, json={"access_token": "a", "refresh_token": "r", "expires_in": 100})
+
+    http = Http(httpx.Client(transport=httpx.MockTransport(handler)))
+    assert auth.client_key(http, {}) == "pubkey"
+    assert auth.exchange(http, {}, "code", "ver")["access_token"] == "a"
+    assert auth.refresh(http, {}, {"refresh_token": "r"})["refresh_token"] == "r"
+    assert all(u.startswith(auth.RELAY_URL) for _, u, _ in seen)
+    sent = json.loads(seen[1][2])
+    assert sent["grant_type"] == "authorization_code" and "client_secret" not in sent
+    # own secret configured -> direct to TikTok, never the relay
+    assert auth.relay_url({"tiktok_client_secret": "x"}) is None

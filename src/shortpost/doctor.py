@@ -96,7 +96,7 @@ def check_token(cfg: dict, platform: str) -> Check | None:
     if platform == "tiktok":
         tt = tokens.load("tiktok")
         if not tt:
-            return Check(name, WARN, "run: shortpost auth tiktok (needs tiktok_client_key/secret secrets)")
+            return Check(name, WARN, "run: shortpost auth tiktok")
         left = (datetime.fromisoformat(tt["refresh_expires_at"]) - datetime.now(timezone.utc)).days
         return Check(name, OK if left > 7 else WARN, f"refresh token valid {left} more days")
     if platform == "threads":

@@ -20,7 +20,7 @@ footer{font-size:.85em;color:#6b5a52;border-top:1px solid #e6d6c8;margin-top:30p
 <h2>This website</h2>
 <p>shortpost.medianopol.com is a static information page. It has no accounts, no forms, no cookies and no analytics. Our web host may keep standard server logs (IP address, time, page requested) for security and troubleshooting.</p>
 <h2>The ShortPost app</h2>
-<p>ShortPost is software that runs on your own computer. The developer does not receive your videos, captions, account information or tokens. Everything below is stored only on your PC, in the app's folder and in your Windows user profile:</p>
+<p>ShortPost is software that runs on your own computer. The developer does not receive your videos, captions or account information, and does not keep your tokens (see the TikTok sign-in relay section). Everything below is stored only on your PC, in the app's folder and in your Windows user profile:</p>
 <ul>
 <li>your videos, generated drafts and a local database of what was posted;</li>
 <li>the access and refresh tokens that you grant to each platform (TikTok, YouTube, Meta, Bluesky), so the app can post on your behalf;</li>
@@ -31,6 +31,8 @@ footer{font-size:.85em;color:#6b5a52;border-top:1px solid #e6d6c8;margin-top:30p
 <li><strong>Platforms you connect</strong> (TikTok, YouTube, Instagram, Facebook, Threads, Bluesky): the video and text you approved are uploaded to the platform you chose, under that platform's own terms and privacy policy. With TikTok, the app uses the TikTok Login Kit and Content Posting API with the scopes you approve on TikTok's consent screen (basic profile information, video upload, video publish). The profile information is used only to show your account name and your allowed privacy options.</li>
 <li><strong>AI text writer:</strong> if you use Google Gemini, the video's file name and any notes you type are sent to Google's Gemini API (the video itself is not). If you use a local Ollama model, nothing leaves your computer.</li>
 </ul>
+<h2>TikTok sign-in relay</h2>
+<p>TikTok requires an app secret that cannot be shipped inside software you install. When you sign in to TikTok from ShortPost without your own TikTok developer app, the app sends your one-time TikTok authorization code (and later your refresh token) to a small relay at shortpost.medianopol.com/relay/. The relay adds the app's secret and forwards the request to TikTok, then returns TikTok's answer to your computer. The relay does not store tokens or codes, does not write them to logs, and does not use them to access your account. Like any web server, the host may record standard request metadata (IP address and time). You can avoid the relay entirely by using your own TikTok developer app and keys.</p>
 <h2>Sharing</h2>
 <p>The developer does not sell, share or have access to your data.</p>
 <h2>Removing access</h2>
